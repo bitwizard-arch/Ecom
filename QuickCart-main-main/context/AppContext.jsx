@@ -7,12 +7,6 @@ import { createContext, useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
 export const AppContext = createContext();
-const token = await getToken();
-console.log("Clerk token:", token); // 👀
-
-const { data } = await axios.get("/api/user/data", {
-  headers: { Authorization: `Bearer ${token}` },
-});
 
 export const useAppContext = () => {
   return useContext(AppContext);
@@ -21,10 +15,8 @@ export const useAppContext = () => {
 export const AppContextProvider = (props) => {
   const currency = process.env.NEXT_PUBLIC_CURRENCY;
   const router = useRouter();
-
   const { user } = useUser();
   const { getToken } = useAuth();
-  
 
   const [products, setProducts] = useState([]);
   const [userData, setUserData] = useState(false);
@@ -40,20 +32,23 @@ export const AppContextProvider = (props) => {
         toast.error(data.message);
       }
     } catch (error) {
-      toast.error(data.message);
+      toast.error(error.message);
     }
   };
 
   const fetchUserData = async () => {
     try {
-      if (user.publicMetadata.role === "seller") {
+      if (user?.publicMetadata?.role === "seller") {
         setIsSeller(true);
       }
 
       const token = await getToken();
+      console.log("Clerk token:", token); // ✅ now inside component
+
       const { data } = await axios.get("/api/user/data", {
         headers: { Authorization: `Bearer ${token}` },
       });
+
       if (data.success) {
         setUserData(data.user);
         setCartItems(data.user.cartItems);
@@ -67,13 +62,10 @@ export const AppContextProvider = (props) => {
 
   const addToCart = async (itemId) => {
     let cartData = structuredClone(cartItems);
-    if (cartData[itemId]) {
-      cartData[itemId] += 1;
-    } else {
-      cartData[itemId] = 1;
-    }
+    cartData[itemId] = (cartData[itemId] || 0) + 1;
     setCartItems(cartData);
     toast.success("Item added to cart");
+
     if (user) {
       try {
         const token = await getToken();
@@ -97,6 +89,7 @@ export const AppContextProvider = (props) => {
       cartData[itemId] = quantity;
     }
     setCartItems(cartData);
+
     if (user) {
       try {
         const token = await getToken();
@@ -113,21 +106,15 @@ export const AppContextProvider = (props) => {
   };
 
   const getCartCount = () => {
-    let totalCount = 0;
-    for (const items in cartItems) {
-      if (cartItems[items] > 0) {
-        totalCount += cartItems[items];
-      }
-    }
-    return totalCount;
+    return Object.values(cartItems).reduce((acc, qty) => acc + qty, 0);
   };
 
   const getCartAmount = () => {
     let totalAmount = 0;
-    for (const items in cartItems) {
-      let itemInfo = products.find((product) => product._id === items);
-      if (cartItems[items] > 0) {
-        totalAmount += itemInfo.offerPrice * cartItems[items];
+    for (const id in cartItems) {
+      const product = products.find((p) => p._id === id);
+      if (product) {
+        totalAmount += product.offerPrice * cartItems[id];
       }
     }
     return Math.floor(totalAmount * 100) / 100;
